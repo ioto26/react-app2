@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import * as THREE from 'three'
 import { Canvas, useFrame, extend } from '@react-three/fiber'
@@ -62,20 +62,23 @@ function Rig({ children, rotation = [0, 0, 0] }: RigProps) {
 interface CarouselProps {
   radius?: number
   count?: number
+  onCardClick?: (index: number) => void
 }
 
-function Carousel({ radius = 1.4, count = 8 }: CarouselProps) {
+function Carousel({ radius = 1.4, count = 8, onCardClick }: CarouselProps) {
   return (
     <>
       {Array.from({ length: count }, (_, i) => (
         <LoginFormCard
           key={i}
+          index={i}
           position={[
             Math.sin((i / count) * Math.PI * 2) * radius,
             0,
             Math.cos((i / count) * Math.PI * 2) * radius
           ]}
-          rotation={[0, Math.PI + (i / count) * Math.PI * 2, 0]}
+          rotation={[0, (i / count) * Math.PI * 2, 0]}
+          onCardClick={onCardClick}
         />
       ))}
     </>
@@ -85,9 +88,11 @@ function Carousel({ radius = 1.4, count = 8 }: CarouselProps) {
 interface LoginFormCardProps {
   position: [number, number, number]
   rotation: [number, number, number]
+  index: number
+  onCardClick?: (index: number) => void
 }
 
-function LoginFormCard({ position, rotation }: LoginFormCardProps) {
+function LoginFormCard({ position, rotation, index, onCardClick }: LoginFormCardProps) {
   const ref = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
 
@@ -97,6 +102,13 @@ function LoginFormCard({ position, rotation }: LoginFormCardProps) {
   }
   
   const pointerOut = () => setHovered(false)
+
+  const handleClick = (e: any) => {
+    e.stopPropagation()
+    if (onCardClick) {
+      onCardClick(index)
+    }
+  }
 
   useFrame((state, delta) => {
     if (ref.current) {
@@ -111,6 +123,7 @@ function LoginFormCard({ position, rotation }: LoginFormCardProps) {
       rotation={rotation}
       onPointerOver={pointerOver} 
       onPointerOut={pointerOut}
+      onClick={handleClick}
     >
       <planeGeometry args={[1, 1]} />
       <meshStandardMaterial 
@@ -122,7 +135,7 @@ function LoginFormCard({ position, rotation }: LoginFormCardProps) {
       {/* User ID Label */}
       <Text
         position={[0, 0.2, 0.01]}
-        fontSize={0.1}
+        fontSize={0.08}
         color="black"
         anchorX="center"
         anchorY="middle"
@@ -130,16 +143,16 @@ function LoginFormCard({ position, rotation }: LoginFormCardProps) {
         ユーザーID:
       </Text>
       
-      {/* User ID Input Field */}
+      {/* User ID Input Field Visual */}
       <mesh position={[0, 0.05, 0.01]}>
-        <planeGeometry args={[0.8, 0.15]} />
+        <planeGeometry args={[0.8, 0.12]} />
         <meshBasicMaterial color="lightgray" />
       </mesh>
 
       {/* Password Label */}
       <Text
         position={[0, -0.1, 0.01]}
-        fontSize={0.1}
+        fontSize={0.08}
         color="black"
         anchorX="center"
         anchorY="middle"
@@ -147,19 +160,19 @@ function LoginFormCard({ position, rotation }: LoginFormCardProps) {
         パスワード:
       </Text>
       
-      {/* Password Input Field */}
+      {/* Password Input Field Visual */}
       <mesh position={[0, -0.25, 0.01]}>
-        <planeGeometry args={[0.8, 0.15]} />
+        <planeGeometry args={[0.8, 0.12]} />
         <meshBasicMaterial color="lightgray" />
       </mesh>
 
       {/* Login Button */}
-      <mesh position={[0, -0.45, 0.01]}>
-        <planeGeometry args={[0.5, 0.15]} />
+      <mesh position={[0, -0.4, 0.01]}>
+        <planeGeometry args={[0.5, 0.12]} />
         <meshBasicMaterial color="green" />
         <Text
           position={[0, 0, 0.01]}
-          fontSize={0.08}
+          fontSize={0.06}
           color="white"
           anchorX="center"
           anchorY="middle"
@@ -167,6 +180,17 @@ function LoginFormCard({ position, rotation }: LoginFormCardProps) {
           ログイン
         </Text>
       </mesh>
+
+      {/* Card number */}
+      <Text
+        position={[0, 0.35, 0.01]}
+        fontSize={0.06}
+        color="darkblue"
+        anchorX="center"
+        anchorY="middle"
+      >
+        カード {index + 1}
+      </Text>
     </mesh>
   )
 }
@@ -180,7 +204,7 @@ function Banner({ position }: BannerProps) {
   const scroll = useScroll()
   
   // Create a simple texture instead of loading from file
-  const texture = new THREE.CanvasTexture(createEGTexture())
+  const texture = useTexture('/EG.png')
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping
 
   useFrame((state, delta) => {
@@ -209,38 +233,208 @@ function Banner({ position }: BannerProps) {
   )
 }
 
-// Create a simple "EG" texture
-function createEGTexture(): HTMLCanvasElement {
-  const canvas = document.createElement('canvas')
-  canvas.width = 256
-  canvas.height = 64
-  const ctx = canvas.getContext('2d')!
-  
-  ctx.fillStyle = '#4a90e2'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  
-  ctx.fillStyle = 'white'
-  ctx.font = 'bold 40px Arial'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('EG', canvas.width / 2, canvas.height / 2)
-  
-  return canvas
+// Login Modal Component
+interface LoginModalProps {
+  isOpen: boolean
+  onClose: () => void
+  cardIndex: number
+}
+
+function LoginModal({ isOpen, onClose, cardIndex }: LoginModalProps) {
+  const [userId, setUserId] = useState('')
+  const [password, setPassword] = useState('')
+
+  const handleLogin = () => {
+    if (userId && password) {
+      alert(`ログイン成功 (カード ${cardIndex + 1}):\nユーザーID: ${userId}\nパスワード: ${password}`)
+      handleClose()
+    } else {
+      alert('ユーザーIDとパスワードを入力してください')
+    }
+  }
+
+  const handleClose = () => {
+    setUserId('')
+    setPassword('')
+    onClose()
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        background: 'rgba(0,0,0,0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000
+      }}
+      onClick={handleClose}
+    >
+      <div
+        style={{
+          background: 'white',
+          padding: '30px',
+          borderRadius: '15px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+          minWidth: '350px',
+          maxWidth: '400px'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 style={{ 
+          margin: '0 0 20px 0', 
+          textAlign: 'center',
+          color: '#333',
+          fontSize: '24px'
+        }}>
+          ログイン (カード {cardIndex + 1})
+        </h2>
+        
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ 
+            display: 'block', 
+            marginBottom: '8px',
+            fontWeight: 'bold',
+            color: '#555'
+          }}>
+            ユーザーID:
+          </label>
+          <input
+            type="text"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '12px',
+              border: '2px solid #ddd',
+              borderRadius: '8px',
+              fontSize: '16px',
+              outline: 'none',
+              transition: 'border-color 0.3s'
+            }}
+            placeholder="ユーザーIDを入力"
+            autoFocus
+            onFocus={(e) => e.target.style.borderColor = '#4CAF50'}
+            onBlur={(e) => e.target.style.borderColor = '#ddd'}
+          />
+        </div>
+
+        <div style={{ marginBottom: '25px' }}>
+          <label style={{ 
+            display: 'block', 
+            marginBottom: '8px',
+            fontWeight: 'bold',
+            color: '#555'
+          }}>
+            パスワード:
+          </label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '12px',
+              border: '2px solid #ddd',
+              borderRadius: '8px',
+              fontSize: '16px',
+              outline: 'none',
+              transition: 'border-color 0.3s'
+            }}
+            placeholder="パスワードを入力"
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                handleLogin()
+              }
+            }}
+            onFocus={(e) => e.target.style.borderColor = '#4CAF50'}
+            onBlur={(e) => e.target.style.borderColor = '#ddd'}
+          />
+        </div>
+
+        <div style={{ 
+          display: 'flex', 
+          gap: '15px', 
+          justifyContent: 'center' 
+        }}>
+          <button
+            onClick={handleLogin}
+            style={{
+              background: 'linear-gradient(45deg, #4CAF50, #45a049)',
+              color: 'white',
+              border: 'none',
+              padding: '12px 25px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              transition: 'transform 0.2s',
+              minWidth: '100px'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+          >
+            ログイン
+          </button>
+          <button
+            onClick={handleClose}
+            style={{
+              background: 'linear-gradient(45deg, #f44336, #da190b)',
+              color: 'white',
+              border: 'none',
+              padding: '12px 25px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              transition: 'transform 0.2s',
+              minWidth: '100px'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+          >
+            キャンセル
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function App() {
+  const [modalOpen, setModalOpen] = useState(false)
+  const [selectedCard, setSelectedCard] = useState(0)
+
+  const handleCardClick = (index: number) => {
+    setSelectedCard(index)
+    setModalOpen(true)
+  }
+
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#1a1a1a' }}>
       <Canvas camera={{ position: [0, 0, 100], fov: 15 }}>
         <fog attach="fog" args={['#a79', 8.5, 12]} />
         <ScrollControls pages={4} infinite>
           <Rig rotation={[0, 0, 0.15]}>
-            <Carousel />
+            <Carousel onCardClick={handleCardClick} />
           </Rig>
           <Banner position={[0, -0.15, 0]} />
         </ScrollControls>
         <Environment preset="dawn" background blur={0.5} />
       </Canvas>
+      
+      <LoginModal 
+        isOpen={modalOpen} 
+        onClose={() => setModalOpen(false)}
+        cardIndex={selectedCard}
+      />
       
       <style>{`
         * {
