@@ -1,475 +1,462 @@
-import React, { useRef, useState, useEffect } from 'react'
-import { createRoot } from 'react-dom/client'
-import * as THREE from 'three'
-import { Canvas, useFrame, extend } from '@react-three/fiber'
-import { Environment, ScrollControls, useScroll, useTexture, Text } from '@react-three/drei'
-import { easing } from 'maath'
+import React from 'react';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import * as THREE from 'three';
 
-// Custom shader material for wave effect
+// ------------------------------------------------------------------
+// TypeScript Interface for the Shader object
+// ------------------------------------------------------------------
+// This interface defines the structure of the shader object passed to onBeforeCompile
+// to resolve potential type definition issues with different library versions.
+interface ShaderObject {
+    uniforms: { [key: string]: THREE.IUniform };
+    vertexShader: string;
+    fragmentShader: string;
+}
+
+// ------------------------------------------------------------------
+// Custom Shader Material (Wave Effect)
+// ------------------------------------------------------------------
+// This class extends THREE.MeshBasicMaterial to create a wave effect on a texture.
+// It injects custom GLSL code into the vertex shader.
 class MeshSineMaterial extends THREE.MeshBasicMaterial {
-  time: { value: number }
+  public time: { value: number };
 
   constructor(parameters: any = {}) {
-    super(parameters)
-    this.setValues(parameters)
-    this.time = { value: 0 }
+    super(parameters);
+    this.setValues(parameters);
+    this.time = { value: 0 };
   }
 
-  onBeforeCompile(shader: any) {
-    shader.uniforms.time = this.time
+  // This method is called by Three.js before compiling the shader.
+  // We use our custom ShaderObject interface for type safety.
+  onBeforeCompile(shader: ShaderObject) {
+    // Pass the 'time' uniform to the shader.
+    shader.uniforms.time = this.time;
+    // Add the uniform declaration to the vertex shader.
     shader.vertexShader = `
       uniform float time;
       ${shader.vertexShader}
-    `
+    `;
+    // Modify the vertex position to create a sine wave effect.
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
+      // The vertex's y-position is animated using a sine function based on time and UV coordinates.
       `vec3 transformed = vec3(position.x, position.y + sin(time + uv.x * PI * 4.0) / 4.0, position.z);`
-    )
+    );
   }
 }
 
-// Extend Three.js with custom material
-extend({ MeshSineMaterial })
 
-// Types for Three.js extensions
-declare module '@react-three/fiber' {
-  interface ThreeElements {
-    meshSineMaterial: any
-  }
-}
-
-interface RigProps {
-  children: React.ReactNode
-  rotation?: [number, number, number]
-}
-
-function Rig({ children, rotation = [0, 0, 0] }: RigProps) {
-  const ref = useRef<THREE.Group>(null)
-  const scroll = useScroll()
-  
-  useFrame((state, delta) => {
-    if (ref.current) {
-      ref.current.rotation.y = -scroll.offset * (Math.PI * 2)
-    }
-    state.events?.update?.()
-    easing.damp3(state.camera.position, [-state.pointer.x * 2, state.pointer.y + 1.5, 10], 0.3, delta)
-    state.camera.lookAt(0, 0, 0)
-  })
-
-  return <group ref={ref} rotation={rotation}>{children}</group>
-}
-
-interface CarouselProps {
-  radius?: number
-  count?: number
-  onCardClick?: (index: number) => void
-}
-
-function Carousel({ radius = 1.4, count = 8, onCardClick }: CarouselProps) {
-  return (
-    <>
-      {Array.from({ length: count }, (_, i) => (
-        <LoginFormCard
-          key={i}
-          index={i}
-          position={[
-            Math.sin((i / count) * Math.PI * 2) * radius,
-            0,
-            Math.cos((i / count) * Math.PI * 2) * radius
-          ]}
-          rotation={[0, (i / count) * Math.PI * 2, 0]}
-          onCardClick={onCardClick}
-        />
-      ))}
-    </>
-  )
-}
-
-interface LoginFormCardProps {
-  position: [number, number, number]
-  rotation: [number, number, number]
-  index: number
-  onCardClick?: (index: number) => void
-}
-
-function LoginFormCard({ position, rotation, index, onCardClick }: LoginFormCardProps) {
-  const ref = useRef<THREE.Mesh>(null)
-  const [hovered, setHovered] = useState(false)
-
-  const pointerOver = (e: any) => {
-    e.stopPropagation()
-    setHovered(true)
-  }
-  
-  const pointerOut = () => setHovered(false)
-
-  const handleClick = (e: any) => {
-    e.stopPropagation()
-    if (onCardClick) {
-      onCardClick(index)
-    }
-  }
-
-  useFrame((state, delta) => {
-    if (ref.current) {
-      easing.damp3(ref.current.scale, hovered ? 1.15 : 1, 0.1, delta)
-    }
-  })
-
-  return (
-    <mesh 
-      ref={ref} 
-      position={position} 
-      rotation={rotation}
-      onPointerOver={pointerOver} 
-      onPointerOut={pointerOut}
-      onClick={handleClick}
-    >
-      <planeGeometry args={[1, 1]} />
-      <meshStandardMaterial 
-        color={hovered ? 'lightblue' : 'white'} 
-        transparent 
-        opacity={0.9} 
-      />
-      
-      {/* User ID Label */}
-      <Text
-        position={[0, 0.2, 0.01]}
-        fontSize={0.08}
-        color="black"
-        anchorX="center"
-        anchorY="middle"
-      >
-        ユーザーID:
-      </Text>
-      
-      {/* User ID Input Field Visual */}
-      <mesh position={[0, 0.05, 0.01]}>
-        <planeGeometry args={[0.8, 0.12]} />
-        <meshBasicMaterial color="lightgray" />
-      </mesh>
-
-      {/* Password Label */}
-      <Text
-        position={[0, -0.1, 0.01]}
-        fontSize={0.08}
-        color="black"
-        anchorX="center"
-        anchorY="middle"
-      >
-        パスワード:
-      </Text>
-      
-      {/* Password Input Field Visual */}
-      <mesh position={[0, -0.25, 0.01]}>
-        <planeGeometry args={[0.8, 0.12]} />
-        <meshBasicMaterial color="lightgray" />
-      </mesh>
-
-      {/* Login Button */}
-      <mesh position={[0, -0.4, 0.01]}>
-        <planeGeometry args={[0.5, 0.12]} />
-        <meshBasicMaterial color="green" />
-        <Text
-          position={[0, 0, 0.01]}
-          fontSize={0.06}
-          color="white"
-          anchorX="center"
-          anchorY="middle"
-        >
-          ログイン
-        </Text>
-      </mesh>
-
-      {/* Card number */}
-      <Text
-        position={[0, 0.35, 0.01]}
-        fontSize={0.06}
-        color="darkblue"
-        anchorX="center"
-        anchorY="middle"
-      >
-        カード {index + 1}
-      </Text>
-    </mesh>
-  )
-}
-
-interface BannerProps {
-  position: [number, number, number]
-}
-
-function Banner({ position }: BannerProps) {
-  const ref = useRef<THREE.Mesh>(null)
-  const scroll = useScroll()
-  
-  // Create a simple texture instead of loading from file
-  const texture = useTexture('/EG.png')
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping
-
-  useFrame((state, delta) => {
-    if (ref.current && ref.current.material) {
-      const material = ref.current.material as any
-      if (material.time) {
-        material.time.value += Math.abs(scroll.delta) * 4
-      }
-      if (material.map) {
-        material.map.offset.x += delta / 2
-      }
-    }
-  })
-
-  return (
-    <mesh ref={ref} position={position}>
-      <cylinderGeometry args={[1.6, 1.6, 0.14, 128, 16, true]} />
-      <meshSineMaterial 
-        map={texture} 
-        map-anisotropy={16} 
-        map-repeat={[30, 1]} 
-        side={THREE.DoubleSide} 
-        toneMapped={false} 
-      />
-    </mesh>
-  )
-}
-
-// Login Modal Component
+// ------------------------------------------------------------------
+// Login Modal Component (Standard React)
+// ------------------------------------------------------------------
+// This is a standard React component for the login form modal.
+// It does not involve any Three.js logic.
 interface LoginModalProps {
-  isOpen: boolean
-  onClose: () => void
-  cardIndex: number
+  isOpen: boolean;
+  onClose: () => void;
+  cardIndex: number;
 }
 
 function LoginModal({ isOpen, onClose, cardIndex }: LoginModalProps) {
-  const [userId, setUserId] = useState('')
-  const [password, setPassword] = useState('')
+  const [userId, setUserId] = React.useState('');
+  const [password, setPassword] = React.useState('');
 
   const handleLogin = () => {
     if (userId && password) {
-      alert(`ログイン成功 (カード ${cardIndex + 1}):\nユーザーID: ${userId}\nパスワード: ${password}`)
-      handleClose()
+      // In a real app, you would perform authentication here.
+      // Using a custom modal instead of alert for better UX.
+      console.log(`Login attempt for card ${cardIndex + 1} with UserID: ${userId}`);
+      handleClose();
     } else {
-      alert('ユーザーIDとパスワードを入力してください')
+      console.warn('User ID and Password are required.');
     }
-  }
+  };
 
   const handleClose = () => {
-    setUserId('')
-    setPassword('')
-    onClose()
-  }
+    setUserId('');
+    setPassword('');
+    onClose();
+  };
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
+  // The modal is styled with inline CSS for simplicity.
   return (
     <div
       style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        background: 'rgba(0,0,0,0.7)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000
+        position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+        background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', zIndex: 1000
       }}
       onClick={handleClose}
     >
       <div
         style={{
-          background: 'white',
-          padding: '30px',
-          borderRadius: '15px',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-          minWidth: '350px',
-          maxWidth: '400px'
+          background: 'white', padding: '30px', borderRadius: '15px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.3)', minWidth: '350px',
+          maxWidth: '400px', fontFamily: 'sans-serif'
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 style={{ 
-          margin: '0 0 20px 0', 
-          textAlign: 'center',
-          color: '#333',
-          fontSize: '24px'
-        }}>
+        <h2 style={{ margin: '0 0 20px 0', textAlign: 'center', color: '#333', fontSize: '24px' }}>
           ログイン (カード {cardIndex + 1})
         </h2>
         
         <div style={{ marginBottom: '20px' }}>
-          <label style={{ 
-            display: 'block', 
-            marginBottom: '8px',
-            fontWeight: 'bold',
-            color: '#555'
-          }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>
             ユーザーID:
           </label>
           <input
-            type="text"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '12px',
-              border: '2px solid #ddd',
-              borderRadius: '8px',
-              fontSize: '16px',
-              outline: 'none',
-              transition: 'border-color 0.3s'
-            }}
-            placeholder="ユーザーIDを入力"
-            autoFocus
-            onFocus={(e) => e.target.style.borderColor = '#4CAF50'}
-            onBlur={(e) => e.target.style.borderColor = '#ddd'}
+            type="text" value={userId} onChange={(e) => setUserId(e.target.value)}
+            style={{ width: '100%', padding: '12px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '16px', boxSizing: 'border-box' }}
+            placeholder="ユーザーIDを入力" autoFocus
           />
         </div>
 
         <div style={{ marginBottom: '25px' }}>
-          <label style={{ 
-            display: 'block', 
-            marginBottom: '8px',
-            fontWeight: 'bold',
-            color: '#555'
-          }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>
             パスワード:
           </label>
           <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '12px',
-              border: '2px solid #ddd',
-              borderRadius: '8px',
-              fontSize: '16px',
-              outline: 'none',
-              transition: 'border-color 0.3s'
-            }}
+            type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+            style={{ width: '100%', padding: '12px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '16px', boxSizing: 'border-box' }}
             placeholder="パスワードを入力"
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') {
-                handleLogin()
-              }
-            }}
-            onFocus={(e) => e.target.style.borderColor = '#4CAF50'}
-            onBlur={(e) => e.target.style.borderColor = '#ddd'}
+            onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
           />
         </div>
 
-        <div style={{ 
-          display: 'flex', 
-          gap: '15px', 
-          justifyContent: 'center' 
-        }}>
-          <button
-            onClick={handleLogin}
-            style={{
-              background: 'linear-gradient(45deg, #4CAF50, #45a049)',
-              color: 'white',
-              border: 'none',
-              padding: '12px 25px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              transition: 'transform 0.2s',
-              minWidth: '100px'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-            onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-          >
+        <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+          <button onClick={handleLogin} style={{ background: '#4CAF50', color: 'white', border: 'none', padding: '12px 25px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>
             ログイン
           </button>
-          <button
-            onClick={handleClose}
-            style={{
-              background: 'linear-gradient(45deg, #f44336, #da190b)',
-              color: 'white',
-              border: 'none',
-              padding: '12px 25px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              transition: 'transform 0.2s',
-              minWidth: '100px'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-            onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-          >
+          <button onClick={handleClose} style={{ background: '#f44336', color: 'white', border: 'none', padding: '12px 25px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>
             キャンセル
           </button>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
+
+// ------------------------------------------------------------------
+// Main Three.js Scene Component
+// ------------------------------------------------------------------
+interface ThreeSceneProps {
+    onCardClick: (index: number) => void;
+}
+
+const ThreeScene: React.FC<ThreeSceneProps> = ({ onCardClick }) => {
+    const mountRef = React.useRef<HTMLDivElement>(null);
+    const scrollRef = React.useRef(0);
+
+    // useEffect hook for setup and cleanup of the Three.js scene.
+    React.useEffect(() => {
+        if (!mountRef.current) return;
+
+        const currentMount = mountRef.current;
+
+        // --- Core Three.js Setup ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.Fog('#a79', 8.5, 12);
+        scene.background = new THREE.Color('#1a1a1a');
+
+        const camera = new THREE.PerspectiveCamera(15, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
+        camera.position.set(0, 0, 10);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        currentMount.appendChild(renderer.domElement);
+        
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const pointLight = new THREE.PointLight(0xffffff, 0.8);
+        pointLight.position.set(2, 5, 5);
+        scene.add(pointLight);
+
+        // --- Raycasting for Interaction ---
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        let hoveredCard: THREE.Object3D | null = null;
+
+        // --- Scene Objects ---
+        const rig = new THREE.Group();
+        rig.rotation.z = 0.15;
+        scene.add(rig);
+
+        const carousel = new THREE.Group();
+        rig.add(carousel);
+
+        const cards: THREE.Object3D[] = [];
+        const cardCount = 8;
+        const radius = 1.4;
+
+        // --- Helper for Creating Text Textures ---
+        const createTextTexture = (text: string, options: any = {}) => {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d')!;
+            const fontSize = options.fontSize || 48;
+            const font = `${fontSize}px sans-serif`;
+            context.font = font;
+            const textMetrics = context.measureText(text);
+            canvas.width = textMetrics.width;
+            canvas.height = fontSize * 1.2;
+
+            context.font = font; // Re-set font after resize
+            context.fillStyle = options.color || 'black';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, canvas.width / 2, canvas.height / 2);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            return texture;
+        };
+
+        // --- Create Carousel Cards ---
+        for (let i = 0; i < cardCount; i++) {
+            const cardGroup = new THREE.Group();
+            
+            // Main card plane
+            const geometry = new THREE.PlaneGeometry(1, 1);
+            const material = new THREE.MeshStandardMaterial({ color: 'white', transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+            const cardMesh = new THREE.Mesh(geometry, material);
+            cardMesh.name = 'main-card'; // Add name for identification
+            cardGroup.add(cardMesh);
+
+            // Store original color
+            (cardMesh.userData as any).originalColor = new THREE.Color('white');
+            (cardMesh.userData as any).hoverColor = new THREE.Color('lightblue');
+
+            // --- Text and UI Elements on the card ---
+            const createTextPlane = (text: string, pos: [number, number, number], size: number, color: string) => {
+                const texture = createTextTexture(text, { fontSize: 64, color });
+                const aspect = texture.image.width / texture.image.height;
+                const planeGeom = new THREE.PlaneGeometry(size * aspect, size);
+                const planeMat = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+                const planeMesh = new THREE.Mesh(planeGeom, planeMat);
+                planeMesh.position.set(pos[0], pos[1], pos[2]);
+                return planeMesh;
+            };
+
+            cardGroup.add(createTextPlane(`カード ${i + 1}`, [0, 0.35, 0.01], 0.06, 'darkblue'));
+            cardGroup.add(createTextPlane('ユーザーID:', [0, 0.2, 0.01], 0.08, 'black'));
+            cardGroup.add(createTextPlane('パスワード:', [0, -0.1, 0.01], 0.08, 'black'));
+            
+            // Input field visuals
+            const inputGeom = new THREE.PlaneGeometry(0.8, 0.12);
+            const inputMat = new THREE.MeshBasicMaterial({ color: 'lightgray' });
+            const userIdInput = new THREE.Mesh(inputGeom, inputMat);
+            userIdInput.position.set(0, 0.05, 0.01);
+            cardGroup.add(userIdInput);
+            
+            const passInput = new THREE.Mesh(inputGeom.clone(), inputMat.clone());
+            passInput.position.set(0, -0.25, 0.01);
+            cardGroup.add(passInput);
+
+            // Login button visual
+            const buttonGeom = new THREE.PlaneGeometry(0.5, 0.12);
+            const buttonMat = new THREE.MeshBasicMaterial({ color: 'green' });
+            const loginButton = new THREE.Mesh(buttonGeom, buttonMat);
+            loginButton.position.set(0, -0.4, 0.01);
+            // Add the "ログイン" text on top of the button
+            loginButton.add(createTextPlane('ログイン', [0, 0, 0.01], 0.06, 'white'));
+            cardGroup.add(loginButton);
+            
+            // Position and rotate the card group
+            const angle = (i / cardCount) * Math.PI * 2;
+            cardGroup.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
+            cardGroup.rotation.y = angle;
+            
+            // Add userData to identify the card index
+            cardGroup.userData.index = i;
+            
+            carousel.add(cardGroup);
+            cards.push(cardGroup);
+        }
+
+        // --- Banner ---
+        const bannerGeom = new THREE.CylinderGeometry(1.6, 1.6, 0.14, 128, 16, true);
+        const bannerTexture = new THREE.TextureLoader().load(
+          'https://placehold.co/3000x100/000000/FFFFFF/png?text=SCROLL+ANIMATION',
+          (texture) => {
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(30, 1);
+            texture.needsUpdate = true;
+          }
+        );
+        const bannerMat = new MeshSineMaterial({
+            map: bannerTexture,
+            side: THREE.DoubleSide,
+            toneMapped: false,
+        });
+        const banner = new THREE.Mesh(bannerGeom, bannerMat);
+        banner.position.y = -0.15;
+        scene.add(banner);
+
+        // --- Event Listeners ---
+        const handleResize = () => {
+            camera.aspect = currentMount.clientWidth / currentMount.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
+        };
+        window.addEventListener('resize', handleResize);
+
+        const handleScroll = () => {
+            const scrollY = window.scrollY;
+            const scrollHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            // Normalize scroll value to be between 0 and 1, handle division by zero
+            scrollRef.current = scrollHeight > 0 ? scrollY / scrollHeight : 0;
+        };
+        window.addEventListener('scroll', handleScroll);
+
+        const handlePointerMove = (event: PointerEvent) => {
+            // Normalize pointer position to [-1, 1] range
+            pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+            pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        };
+        window.addEventListener('pointermove', handlePointerMove);
+        
+        const handleClick = () => {
+            if (hoveredCard && hoveredCard.userData.index !== undefined) {
+                onCardClick(hoveredCard.userData.index);
+            }
+        };
+        window.addEventListener('click', handleClick);
+
+        // --- Animation Loop ---
+        const clock = new THREE.Clock();
+        let scrollDelta = 0;
+        let lastScroll = 0;
+
+        const animate = () => {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            // Update scroll delta
+            scrollDelta = scrollRef.current - lastScroll;
+            lastScroll = scrollRef.current;
+
+            // 1. Update rig rotation based on scroll
+            rig.rotation.y = -scrollRef.current * (Math.PI * 2);
+
+            // 2. Update camera position based on pointer (easing)
+            const targetCameraPos = new THREE.Vector3(-pointer.x * 2, pointer.y + 1.5, 10);
+            camera.position.lerp(targetCameraPos, 0.1);
+            camera.lookAt(0, 0, 0);
+
+            // 3. Update banner animation
+            bannerMat.time.value += Math.abs(scrollDelta) * 4;
+            if (bannerMat.map) {
+                bannerMat.map.offset.x += delta / 2;
+            }
+
+            // 4. Raycasting for hover effects
+            raycaster.setFromCamera(pointer, camera);
+            const intersects = raycaster.intersectObjects(carousel.children, true);
+            
+            const firstIntersectedCardGroup = intersects.find(intersect => intersect.object.parent?.userData.index !== undefined)?.object.parent;
+
+            if (firstIntersectedCardGroup && firstIntersectedCardGroup !== hoveredCard) {
+                // Clear previous hover
+                if (hoveredCard) {
+                    const mainMesh = hoveredCard.getObjectByName('main-card') as THREE.Mesh;
+                    (mainMesh.material as THREE.MeshStandardMaterial).color.copy((mainMesh.userData as any).originalColor);
+                }
+                
+                // Set new hover
+                hoveredCard = firstIntersectedCardGroup;
+                const mainMesh = hoveredCard.getObjectByName('main-card') as THREE.Mesh;
+                (mainMesh.material as THREE.MeshStandardMaterial).color.copy((mainMesh.userData as any).hoverColor);
+
+            } else if (!firstIntersectedCardGroup && hoveredCard) {
+                // Mouse out
+                const mainMesh = hoveredCard.getObjectByName('main-card') as THREE.Mesh;
+                (mainMesh.material as THREE.MeshStandardMaterial).color.copy((mainMesh.userData as any).originalColor);
+                hoveredCard = null;
+            }
+            
+            // 5. Animate card scale on hover
+            cards.forEach(card => {
+                const targetScale = (hoveredCard === card) ? 1.15 : 1;
+                card.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
+            });
+
+            renderer.render(scene, camera);
+        };
+        animate();
+
+        // --- Cleanup ---
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            window.removeEventListener('scroll', handleScroll);
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('click', handleClick);
+            if (currentMount.contains(renderer.domElement)) {
+                currentMount.removeChild(renderer.domElement);
+            }
+        };
+    }, [onCardClick]); // Re-run effect if onCardClick changes
+
+    return <div ref={mountRef} style={{ width: '100%', height: '100%', position: 'fixed', top: 0, left: 0 }} />;
+};
+
+
+// ------------------------------------------------------------------
+// Main App Component
+// ------------------------------------------------------------------
 export default function App() {
-  const [modalOpen, setModalOpen] = useState(false)
-  const [selectedCard, setSelectedCard] = useState(0)
+  const [modalOpen, setModalOpen] = React.useState(false);
+  const [selectedCard, setSelectedCard] = React.useState(0);
 
   const handleCardClick = (index: number) => {
-    setSelectedCard(index)
-    setModalOpen(true)
-  }
+    setSelectedCard(index);
+    setModalOpen(true);
+  };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#1a1a1a' }}>
-      <Canvas camera={{ position: [0, 0, 100], fov: 15 }}>
-        <fog attach="fog" args={['#a79', 8.5, 12]} />
-        <ScrollControls pages={4} infinite>
-          <Rig rotation={[0, 0, 0.15]}>
-            <Carousel onCardClick={handleCardClick} />
-          </Rig>
-          <Banner position={[0, -0.15, 0]} />
-        </ScrollControls>
-        <Environment preset="dawn" background blur={0.5} />
-      </Canvas>
+    // The main container needs a fixed size.
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
+        {/* This div creates the scrollable area. Its height determines how much you can scroll. */}
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '1px', height: '400vh' }} />
+
+        {/* The Three.js scene is rendered here. */}
+        <ThreeScene onCardClick={handleCardClick} />
       
-      <LoginModal 
-        isOpen={modalOpen} 
-        onClose={() => setModalOpen(false)}
-        cardIndex={selectedCard}
-      />
-      
-      <style>{`
-        * {
-          box-sizing: border-box;
-        }
+        {/* The React-based modal is rendered on top. */}
+        <LoginModal 
+            isOpen={modalOpen} 
+            onClose={() => setModalOpen(false)}
+            cardIndex={selectedCard}
+        />
         
-        html, body {
-          width: 100%;
-          height: 100%;
-          margin: 0;
-          padding: 0;
-          overflow: hidden;
-        }
-        
-        canvas {
-          touch-action: none;
-          animation: fade-in 2s ease 0s forwards;
-          opacity: 0;
-        }
-        
-        @keyframes fade-in {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-      `}</style>
+        {/* Global styles */}
+        <style>{`
+            html, body, #root {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+                background: #1a1a1a;
+            }
+            /* Make the main app container scrollable */
+            body {
+                overflow-y: scroll;
+            }
+        `}</style>
     </div>
-  )
+  );
 }
 
-function Root() {
-  return (
-    <>
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  createRoot(rootElement).render(
+    <StrictMode>
       <App />
-    </>
-  )
+    </StrictMode>
+  );
 }
-
-createRoot(document.getElementById('root')!).render(<Root />)
